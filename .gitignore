@@ -1,0 +1,14 @@
+/regexLearnXInY
+/Talk.tex
+/static_hello
+/static_json
+*.o
+/_minted-Talk/**/*
+/fieldPairs
+/printf
+/regexDemo
+/csv_parser
+/has_member
+/hello
+/json_printwithtype
+/json_reflection

@@ -1,0 +1,394 @@
+#+TITLE: What FP Can Learn From Static Introspection
+#+AUTHOR: Aditya Siram
+#+OPTIONS: H:1 toc:f
+#+OPTIONS: ^:nil
+#+LATEX_CLASS: beamer
+#+LATEX_listingsCLASS_OPTIONS: [presentation]
+#+BEAMER_THEME: metropolis
+
+* What?
+  - Static introspection
+    - Reflection at compile time
+      - Types, record field names, etc.
+      - Does this compile?
+    - Conditionally generate code
+  - Compile Time Function Evaluation
+    - Term level language is available at compile time
+    - For/while loops, functions, assignment
+  - Put them together!
+* Why?
+  - Typed functional languages need this!
+  - Performance
+    - Play the optimizer/JIT compiler
+    - No silver bullet
+  - Type level programming boring!
+    - Accessible, maintainable, possible!
+  - Type level querying!
+    - Library level, project specific tooling!
+  - Customizable compiler feedback
+    - Control over error messages
+    - Library specific user experience
+* What?
+  - Examples in Nim and D
+    - Imperative languages in the C++/Ada tradition
+  - Real World Examples!
+  - Learn not adopt!
+* Compile Time Evaluation In Nim
+#+begin_src nim
+  proc say_hello(s:string): string =
+    when nimVM:
+      "Hello to " & s & " at compile time!"
+    else:
+      "Hello to " & s & " at runtime!"
+
+  static:
+    echo say_hello("Lambda World Cadiz")
+  
+  echo say_hello("Lambda World Cadiz")
+#+end_src
+* Compile Time Evaluation In Nim
+#+begin_src bash
+$ nim c hello.nim 
+Hello to Lambda World Cadiz at compile time!
+$ ./hello 
+Hello to Lambda World Cadiz at runtime!
+#+end_src
+* Static Introspection In D
+#+begin_src D
+import std.stdio;
+
+struct S
+{
+  int anInt;
+  string aString;
+};
+
+pragma(msg, __traits(allMembers,S));
+
+void main() {}
+#+end_src
+* Static Introspection In D
+#+begin_src bash
+$ dmd has_member.d 
+tuple("anInt", "aString")
+#+end_src
+* Static Introspection In D
+#+begin_src D
+import std.stdio;
+
+struct S
+{
+  int anInt;
+  string aString;
+};
+            
+pragma(msg, typeof(__traits(getMember, S, "anInt")));
+
+void main() {}
+#+end_src
+* Static Introspection In D
+#+begin_src bash
+$ dmd has_member.d 
+int
+#+end_src
+* Static Introspection In D
+#+begin_src D
+import std.stdio;
+
+struct S
+{
+  int anInt;
+  string aString;
+};
+
+pragma(msg, typeof(__traits(getMember, S, "foo")));
+
+void main() {}
+#+end_src
+* Static Introspection In D
+#+begin_src bash
+$ dmd members.d
+members.d(9): Error: no property foo for type S
+_error_
+#+end_src
+* Static Introspection In D
+#+begin_src D
+import std.stdio;
+
+class C
+{
+  int anInt;
+  string aString;
+};
+
+pragma(msg, __traits(allMembers,C));
+
+void main() {}
+#+end_src
+* Static Introspection In D
+#+begin_src bash
+$ dmd members.d
+tuple("anInt", "aString", "toString", "toHash", 
+      "opCmp", "opEquals", "Monitor", "factory")
+#+end_src
+* Performance
+  - Performance advantages of CTFE!
+* Performance
+  - Reading (21,000 line) CSV at compile time in Nim
+    #+begin_src nim
+      proc readCsv(s:string): seq[seq[string]] =
+        var p: CsvParser
+        p.open(newStringStream(s),"input")
+        while p.readRow():
+          result.add(p.row)
+
+      const parsed = readCsv(staticRead("large.csv"))
+    #+end_src
+* Performance
+  - 10 second compile time
+  - Lookup is instant
+* Performance
+  - Not always worth it!
+  - 22MB binary vs. 2.4MB CSV
+  - Only 1.5 seconds to compile time for runtime parsing
+    #+begin_src nim
+      # const parsed = readCsv(staticRead("large.csv"))
+      let parsed = readCsv(readFile("large.csv"))
+    #+end_src
+  - Initial runtime parse < 1 second
+    - Compile time processing is much slower!
+* Performance
+  - D's _std.regex_
+  - Runtime regex 
+    #+begin_src d
+      auto r = r"...";
+   #+end_src
+  - Compile time regex
+    #+begin_src d
+      auto r = ctRegex!(`...`);
+    #+end_src
+    - Highly specialized compile time generated engine
+* Performance
+  - Test regex (primality tester)
+    #+begin_src
+     ^(11+?)\1+
+    #+end_src
+    - "1111..."
+    - No match if # of '1's is prime
+    - Abigail (Perl)
+  - Backtracks a ton
+  - 104729 (10,000th prime)
+* Performance
+  - Both took 2.5 minutes
+  - Almost no difference in performance. :(
+  - Performance is hard ...
+    - CTFE is not a silver bullet
+    - Compile times vs. one time runtime hit
+    - Increased Binary sizes
+  - Really need to measure
+* Performance
+  - The real MVP is common code and quickly toggle
+  - Measurement is _possible_
+    - At worst you've lost a few days of work ...
+    - And you have a runtime library
+  - Would you attempt this another typed FP language?
+    - Compile time regex in Haskell?
+    - Could you throw it away?
+* Fast Domain Specific Lookup
+  - Fast lookups!
+  - Look up fields in a domain specific way
+* Fast Domain Specific Lookup
+  - Object in Nim
+    #+begin_src nim
+      type
+        O1 = object
+          o1user_id : int
+          o1Ids : seq[int]
+          o1age: int
+          o1user_address : string
+    #+end_src
+* Fast Domain Specific Lookup
+  - Gather the fields _and_ types
+    #+begin_src nim
+      proc gatherFields(t:typedesc): seq[(string,string)] =
+        var o : t
+        for n,v in fieldPairs(o):
+          result.add((n,$v.type))
+    #+end_src
+* Fast Domain Specific Lookup
+  - Run it!
+    #+begin_src nim
+      static:
+        let o1 = gatherFields(O1)
+        echo o1
+    #+end_src
+  - Outputs
+    #+begin_src bash
+      $ nim c fieldPairs
+      @[("o1user_id", "int"), ("o1ids", "seq[int]"), 
+        ("o1age", "int"), ("o1user_address", "string")]
+    #+end_src
+* Fast Domain Specific Lookup
+  - Big deal!
+    - Language REPL is enough 
+    - GHCi, ':i'
+* Fast Domain Specific Lookup
+  - Object
+    #+begin_src nim
+      type
+        O1 = object
+          o1user_id : int
+          o1Ids : seq[int]
+          o1age: int
+          o1user_address : string
+    #+end_src
+  - I know there's /some/ kind of "ids" like field
+    - Of type 'seq[int]'
+* Fast Domain Specific Lookup
+  - Filter it!
+    #+begin_src nim
+      static:
+        let o1 = gatherFields(O1)
+        echo o1.filterIt(it[0].toLower.contains("ids") 
+                     and it[1] == $seq[int])
+    #+end_src
+  - Output
+    #+begin_src  bash
+      $ nim c fieldPairs
+      @[("o1Ids", "seq[int]")]
+    #+end_src
+* Fast Domain Specific Lookup
+  - Make domain specific tooling
+    - Fits your project!
+  - Tiny (throwaway) tool that does one thing
+    - For one specific instance
+  - Need a _lot_ of work to get this in an IDE
+* Datatype Diffing
+  - Datatype diffing
+    - What fields were added/removed between
+      two versions of a datatype?
+  - Hugely important
+  - Especially when serialization becomes involved
+* Datatype Diffing
+  - Another object
+    #+begin_src nim
+      type
+        O2 = object
+          id : int
+          ids : seq[int]
+          age: int
+          address : string
+          email: string
+    #+end_src
+* Datatype Diffing
+  - First object
+    #+begin_src nim
+      type
+        O1 = object
+          o1user_id : int
+          o1Ids : seq[int]
+          o1age: int
+          o1user_address : string
+    #+end_src
+* Datatype Diffing
+  - Massage the fields
+    #+begin_src  nim
+      static:
+        let o1 = gatherFields(O1)
+        var o1stripped : seq[(string,string)]
+        for f in o1:
+          var s = f[0].toLower
+          s.removePrefix("o1")
+          s.removePrefix("user")
+          s.removePrefix("_")
+          o1stripped.add((s,f[1]))
+    #+end_src
+* Datatype Diffing
+  - Do the diff!
+    #+begin_src  nim
+      static:
+        ...
+        let o2 = gatherFields(O2)
+        echo o1Stripped.toHashSet - o2.toHashSet
+        echo o2.toHashSet - o1Stripped.toHashSet
+    #+end_src
+  - Output
+    #+begin_src nim
+      $ nim c fieldPairs
+      {}
+      {("email", "string")}
+    #+end_src
+    - 'O2' added an 'email' field
+* Datatype Diffing
+  - Reliably do datatype migration
+    - Same as database migration!
+  - Testable and human inspectable
+  - Crucial to {de}serializing
+    - Especially when backwards compatibility is important
+* Compile Time Type Reflection
+  - Compile time JSON parsing
+  - Demo!
+* Compile Time Type Reflection
+  - Reflect on the structure of sample data
+  - Find inconsistencies!
+    #+begin_src 
+      {
+        ...
+        "grades" : [100,80,50,33.3]
+      }
+    #+end_src
+  - Generate API reports
+  - Communicate with frontend team 
+    - "What type does this map to?"
+* Compile Time Type Reflection
+  - We can do better!
+  - Compile time type reflection!
+  - Demo!
+* Compile Time Type Reflection
+  - Ring any bells?
+* Compile Time Type Reflection
+  - Not in F#
+   - Generate a type from a _composite_ of samples
+  - Quickly manage external API specs
+* Type Safe Printf
+  - Static introspection for a type safe printf!
+  - Demo!
+* Type Safe Printf
+  - Domain specific, user customizable holes!
+  - Closes the feedback loop between the computer and user
+  - Why Google?
+* Problems
+    "A good science fiction story should be to predict
+     not the automobile but the traffic jam." -- Frederick Pohl
+* Problems
+  - Performance
+    - Please measure ...
+  - Loss Of Modularity
+    - Horribly coupled types
+    - Refactorable only in theory
+  - "God" object
+  - Parametricity
+    - This function now has infinite implementations
+      #+begin_src haskell
+       id :: a -> a
+      #+end_src
+    - "Sealed" types with explicit unsealing?
+    - Tracked by the type system?
+  - IDE support
+    - What should the IDE fill in for the '_'.
+      #+begin_src nim
+       proc p(a : T) = 
+         when T is _ : 
+      #+end_src
+    - Cripples any predictive ability
+* Conclusion
+  - ... but it's still worth exploring
+  - Need type level reflection
+  - Flexible interfaces
+  - Type safe string formats
+    - printf
+    - type safe URIs
+  - Ability to directly query your codebase
+    - Better and more flexible software
+  - Granular tooling support 
+    - At the library/module level
